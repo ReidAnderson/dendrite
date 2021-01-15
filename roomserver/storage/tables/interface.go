@@ -151,6 +151,15 @@ type RedactionInfo struct {
 	RedactionEventID string
 }
 
+type ExpiryInfo struct {
+	EventNID        types.EventNID
+	ExpiryTimestamp int64
+}
+
+type Expiry interface {
+	InsertExpiry(ctx context.Context, txn *sql.Tx, info ExpiryInfo) error
+}
+
 type Redactions interface {
 	InsertRedaction(ctx context.Context, txn *sql.Tx, info RedactionInfo) error
 	// SelectRedactionInfoByRedactionEventID returns the redaction info for the given redaction event ID, or nil if there is no match.

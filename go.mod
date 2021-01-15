@@ -47,4 +47,6 @@ require (
 	gopkg.in/yaml.v2 v2.3.0
 )
 
+replace github.com/matrix-org/gomatrixserverlib => /home/reid/programming/openSource/gomatrixserverlib/
+
 go 1.13

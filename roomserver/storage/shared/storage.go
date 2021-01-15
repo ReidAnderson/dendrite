@@ -44,6 +44,7 @@ type Database struct {
 	MembershipTable            tables.Membership
 	PublishedTable             tables.Published
 	RedactionsTable            tables.Redactions
+	ExpiryTable                tables.Expiry
 	GetLatestEventsForUpdateFn func(ctx context.Context, roomInfo types.RoomInfo) (*LatestEventsUpdater, error)
 }
 
@@ -568,6 +569,13 @@ func (d *Database) PublishRoom(ctx context.Context, roomID string, publish bool)
 
 func (d *Database) GetPublishedRooms(ctx context.Context) ([]string, error) {
 	return d.PublishedTable.SelectAllPublishedRooms(ctx, true)
+}
+
+func (d *Database) StoreExpiry(ctx context.Context, eventNID types.EventNID, ts int64) error {
+	// output info.ExpiryInfo
+	return d.Writer.Do(d.DB, nil, func(txn *sql.Tx) error {
+		return d.ExpiryTable.InsertExpiry(ctx, txn, tables.ExpiryInfo{EventNID: eventNID, ExpiryTimestamp: ts})
+	})
 }
 
 func (d *Database) assignRoomNID(

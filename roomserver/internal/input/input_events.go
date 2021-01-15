@@ -19,7 +19,9 @@ package input
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"time"
 
 	"github.com/matrix-org/dendrite/internal/eventutil"
 	"github.com/matrix-org/dendrite/roomserver/api"
@@ -30,6 +32,87 @@ import (
 	"github.com/matrix-org/util"
 	"github.com/sirupsen/logrus"
 )
+
+func waituntil(ts int64, event *gomatrixserverlib.Event, r *Inputer, tid *api.TransactionID, nids []types.EventNID, ctx context.Context, headered *gomatrixserverlib.HeaderedEvent) {
+	for {
+		if time.Now().Unix()*1000 > ts {
+
+			// newEvent, err := gomatrixserverlib.NewEventFromTrustedJSON(event.JSON(), true, gomatrixserverlib.RoomVersionV6)
+
+			// logrus.WithFields(logrus.Fields{
+			// 	"event": newEvent,
+			// 	"err":   err,
+			// })
+
+			// // r.WriteOutputEvents(event.RoomID(), []api.OutputEvent{
+			// // 	{
+			// // 		Type: api.OutputTypeRedactedEvent,
+			// // 		RedactedEvent: &api.OutputRedactedEvent{
+			// // 			RedactedEventID: event.EventID(),
+			// // 			RedactedBecause: event.Headered(headered.RoomVersion),
+			// // 		},
+			// // 	},
+			// // })
+
+			// _, testPriv, _ := ed25519.GenerateKey(nil)
+			// cfg := &config.ClientAPI{
+			// 	Matrix: &config.Global{
+			// 		ServerName: "someServer",
+			// 		KeyID:      "1234",
+			// 		PrivateKey: testPriv,
+			// 	},
+			// }
+
+			// logrus.WithFields(logrus.Fields{
+			// 	"ts":           ts,
+			// 	"current time": time.Now().Unix() * 1000,
+			// }).Info("We have met the time threshold")
+
+			// userID := "@localhost-account:localhost"
+			// eb := gomatrixserverlib.EventBuilder{
+			// 	Type:     "m.room.redaction",
+			// 	Sender:   userID,
+			// 	StateKey: &userID,
+			// 	RoomID:   event.RoomID(),
+			// 	Redacts:  event.EventID(),
+			// }
+			// // if err = eb.SetContent(map[string]interface{}{"membership": "leave"}); err != nil {
+			// // 	return nil, fmt.Errorf("eb.SetContent: %w", err)
+			// // }
+			// // if err = eb.SetUnsigned(struct{}{}); err != nil {
+			// // 	return nil, fmt.Errorf("eb.SetUnsigned: %w", err)
+			// // }
+			// eventsNeeded, err := gomatrixserverlib.StateNeededForEventBuilder(&eb)
+
+			// var queryRes api.QueryLatestEventsAndStateResponse
+			// err = helpers.QueryLatestEventsAndState(ctx, r.DB, &api.QueryLatestEventsAndStateRequest{
+			// 	RoomID:       eb.RoomID,
+			// 	StateToFetch: eventsNeeded.Tuples(),
+			// }, &queryRes)
+
+			// redactEvent, _ = eventutil.BuildEvent(ctx, &eb, cfg.Matrix, time.Now(), &eventsNeeded, &queryRes)
+
+			now := gomatrixserverlib.AsTimestamp(time.Now())
+
+			newtid := api.TransactionID{TransactionID: string(gomatrixserverlib.TransactionID(fmt.Sprintf("%d-%d", now, 0)))}
+
+			redactedEvent := event.Redact()
+
+			_, stateAtEvent, redactionEvent, redactedEventID, err := r.DB.StoreEvent(ctx, redactedEvent, &newtid, nids, false)
+
+			logrus.WithFields(logrus.Fields{
+				"ts":              ts,
+				"current time":    time.Now().Unix() * 1000,
+				"stateAtEvent":    stateAtEvent,
+				"redactionEvent":  redactionEvent,
+				"redactedEventID": redactedEventID,
+				"err":             err,
+			}).Info("We made an event call")
+
+			break
+		}
+	}
+}
 
 // processRoomEvent can only be called once at a time
 //
@@ -108,6 +191,30 @@ func (r *Inputer) processRoomEvent(
 	if err != nil {
 		return "", fmt.Errorf("r.DB.StoreEvent: %w", err)
 	}
+
+	var content gomatrixserverlib.SelfDestructContent
+
+	if err := json.Unmarshal(event.Content(), &content); err != nil {
+		logrus.Warn("Value not understood")
+	}
+
+	var some float64
+	if content.SelfDestructAfter > 0 {
+		r.DB.StoreExpiry(ctx, stateAtEvent.EventNID, content.SelfDestructAfter)
+		go waituntil(content.SelfDestructAfter, event, r, input.TransactionID, authEventNIDs, ctx, headered)
+	}
+
+	if content.SelfDestruct > 0 {
+		r.DB.StoreExpiry(ctx, stateAtEvent.EventNID, content.SelfDestruct)
+	}
+
+	logrus.WithFields(logrus.Fields{
+		"SelfDestructEventContent": content,
+		"name":                     some,
+		"event_id":                 event.EventID(),
+		"type":                     event.Type(),
+		"room":                     event.RoomID(),
+	}).Warn("Dump event")
 
 	// if storing this event results in it being redacted then do so.
 	if !isRejected && redactedEventID == event.EventID() {

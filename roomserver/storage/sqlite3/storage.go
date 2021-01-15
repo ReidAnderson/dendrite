@@ -130,6 +130,10 @@ func (d *Database) prepare(db *sql.DB, cache caching.RoomServerCaches) error {
 	if err != nil {
 		return err
 	}
+	expiry, err := NewSqliteExpiryTable(db)
+	if err != nil {
+		return err
+	}
 	d.Database = shared.Database{
 		DB:                         db,
 		Cache:                      cache,
@@ -148,6 +152,7 @@ func (d *Database) prepare(db *sql.DB, cache caching.RoomServerCaches) error {
 		MembershipTable:            membership,
 		PublishedTable:             published,
 		RedactionsTable:            redactions,
+		ExpiryTable:                expiry,
 		GetLatestEventsForUpdateFn: d.GetLatestEventsForUpdate,
 	}
 	return nil

@@ -141,6 +141,8 @@ type Database interface {
 	// Returns a list of room IDs for rooms which are published.
 	GetPublishedRooms(ctx context.Context) ([]string, error)
 
+	StoreExpiry(ctx context.Context, eventNID types.EventNID, ts int64) error
+
 	// TODO: factor out - from currentstateserver
 
 	// GetStateEvent returns the state event of a given type for a given room with a given state key
