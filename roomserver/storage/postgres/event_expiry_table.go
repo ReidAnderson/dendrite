@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package sqlite3
+package postgres
 
 import (
 	"context"
@@ -33,8 +33,8 @@ CREATE TABLE IF NOT EXISTS roomserver_event_expiry (
 `
 
 const insertExpirySQL = "" +
-	"INSERT OR IGNORE INTO roomserver_event_expiry (event_nid, expiry_ts)" +
-	" VALUES ($1, $2)"
+	"INSERT INTO roomserver_event_expiry (event_nid, expiry_ts)" +
+	" VALUES ($1, $2) ON CONFLICT DO NOTHING"
 
 const getExpiredSQL = "" +
 	"SELECT event_nid FROM roomserver_event_expiry" +

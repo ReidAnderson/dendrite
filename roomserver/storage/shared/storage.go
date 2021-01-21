@@ -578,6 +578,10 @@ func (d *Database) StoreExpiry(ctx context.Context, eventNID types.EventNID, ts 
 	})
 }
 
+func (d *Database) GetExpired(ctx context.Context, ts int64) ([]types.EventNID, error) {
+	return d.ExpiryTable.GetExpired(ctx, ts)
+}
+
 func (d *Database) assignRoomNID(
 	ctx context.Context, txn *sql.Tx,
 	roomID string, roomVersion gomatrixserverlib.RoomVersion,

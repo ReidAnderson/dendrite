@@ -15,7 +15,11 @@
 package roomserver
 
 import (
+	"context"
+	"time"
+
 	"github.com/gorilla/mux"
+	"github.com/matrix-org/dendrite/internal/eventutil"
 	"github.com/matrix-org/dendrite/roomserver/api"
 	"github.com/matrix-org/dendrite/roomserver/inthttp"
 	"github.com/matrix-org/gomatrixserverlib"
@@ -54,8 +58,71 @@ func NewInternalAPI(
 		logrus.WithError(err).Panicf("failed to connect to room server db")
 	}
 
-	return internal.NewRoomserverAPI(
+	rsAPI := internal.NewRoomserverAPI(
 		cfg, roomserverDB, producer, string(cfg.Matrix.Kafka.TopicFor(config.TopicOutputRoomEvent)),
 		base.Caches, keyRing, perspectiveServerNames,
 	)
+
+	go scheduledExpiryTask(roomserverDB, cfg, rsAPI)
+
+	return rsAPI
+}
+
+type redactionContent struct {
+	Reason string `json:"reason"`
+}
+
+func scheduledExpiryTask(db storage.Database, cfg *config.RoomServer, rsAPI *internal.RoomserverInternalAPI) {
+	for {
+		time.Sleep(750 * time.Millisecond)
+
+		expired, _ := db.GetExpired(context.Background(), time.Now().Unix()*1000)
+
+		logrus.WithField("ExpiredNids", expired).Info("Checking for expired messages")
+
+		// We have the NIDs - now lets expire them
+		events, err := db.Events(context.Background(), expired)
+
+		// var r redactionContent
+		// r = redactionContent{
+		// 	Reason: "Redacted because message expired",
+		// }
+
+		if err != nil {
+			logrus.WithError(err)
+		}
+
+		var r redactionContent
+		for _, v := range events {
+			builder := gomatrixserverlib.EventBuilder{
+				Sender:  v.Sender(),
+				RoomID:  v.RoomID(),
+				Type:    gomatrixserverlib.MRoomRedaction,
+				Redacts: v.EventID(),
+			}
+			r = redactionContent{}
+			err := builder.SetContent(r)
+			if err != nil {
+				logrus.WithError(err).Error("builder.SetContent failed")
+			}
+
+			logrus.WithField("Info", v.EventID()).Info("Redacting event")
+
+			// err := builder.SetContent(r)
+			// if err != nil {
+			// 	logrus.WithError(err).Error("builder.SetContent failed")
+			// }
+
+			var queryRes api.QueryLatestEventsAndStateResponse
+			e, err := eventutil.QueryAndBuildEvent(context.Background(), &builder, cfg.Matrix, time.Now(), rsAPI, &queryRes)
+
+			if err != nil {
+				logrus.WithError(err).Error("Error building event")
+			}
+
+			if err = api.SendEvents(context.Background(), rsAPI, api.KindNew, []*gomatrixserverlib.HeaderedEvent{e}, cfg.Matrix.ServerName, nil); err != nil {
+				logrus.WithError(err).Error("Event send failed")
+			}
+		}
+	}
 }

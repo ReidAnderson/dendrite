@@ -142,6 +142,7 @@ type Database interface {
 	GetPublishedRooms(ctx context.Context) ([]string, error)
 
 	StoreExpiry(ctx context.Context, eventNID types.EventNID, ts int64) error
+	GetExpired(ctx context.Context, ts int64) ([]types.EventNID, error)
 
 	// TODO: factor out - from currentstateserver
 

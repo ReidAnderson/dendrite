@@ -49,6 +49,7 @@ func NewInternalAPI(
 		Producer: producer,
 		DB:       db,
 	}
+	// ANDEREID TODO - this I think is exactly what we want
 	updater := internal.NewDeviceListUpdater(db, keyChangeProducer, fedClient, 8) // 8 workers TODO: configurable
 	go func() {
 		if err := updater.Start(); err != nil {
