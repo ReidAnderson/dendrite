@@ -159,6 +159,7 @@ type ExpiryInfo struct {
 type Expiry interface {
 	InsertExpiry(ctx context.Context, txn *sql.Tx, info ExpiryInfo) error
 	GetExpired(ctx context.Context, ts int64) ([]types.EventNID, error)
+	RemoveExpiry(ctx context.Context, txn *sql.Tx, eventNID types.EventNID) error
 }
 
 type Redactions interface {

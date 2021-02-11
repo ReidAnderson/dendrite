@@ -40,6 +40,9 @@ const getExpiredSQL = "" +
 	"SELECT event_nid FROM roomserver_event_expiry" +
 	" WHERE expiry_ts < $1"
 
+const deleteExpirySQL = "" +
+	"DELETE FROM roomserver_event_expiry WHERE event_nid = $1"
+
 // const selectRedactionInfoByRedactionEventIDSQL = "" +
 // 	"SELECT redaction_event_id, redacts_event_id, validated FROM roomserver_redactions" +
 // 	" WHERE redaction_event_id = $1"
@@ -55,6 +58,7 @@ type expiryStatements struct {
 	db               *sql.DB
 	insertExpiryStmt *sql.Stmt
 	getExpiredStmt   *sql.Stmt
+	deleteExpiryStmt *sql.Stmt
 	// selectRedactionInfoByRedactionEventIDStmt   *sql.Stmt
 	// selectRedactionInfoByEventBeingRedactedStmt *sql.Stmt
 	// markRedactionValidatedStmt                  *sql.Stmt
@@ -73,6 +77,7 @@ func NewSqliteExpiryTable(db *sql.DB) (tables.Expiry, error) {
 	return s, shared.StatementList{
 		{&s.insertExpiryStmt, insertExpirySQL},
 		{&s.getExpiredStmt, getExpiredSQL},
+		{&s.deleteExpiryStmt, deleteExpirySQL},
 		// {&s.selectRedactionInfoByRedactionEventIDStmt, selectRedactionInfoByRedactionEventIDSQL},
 		// {&s.selectRedactionInfoByEventBeingRedactedStmt, selectRedactionInfoByEventBeingRedactedSQL},
 		// {&s.markRedactionValidatedStmt, markRedactionValidatedSQL},
@@ -102,4 +107,12 @@ func (s *expiryStatements) GetExpired(
 		expiredNIDs = append(expiredNIDs, nid)
 	}
 	return expiredNIDs, rows.Err()
+}
+
+func (s *expiryStatements) RemoveExpiry(
+	ctx context.Context, txn *sql.Tx, eventNID types.EventNID,
+) error {
+	stmt := sqlutil.TxStmt(txn, s.deleteExpiryStmt)
+	_, err := stmt.ExecContext(ctx, eventNID)
+	return err
 }

@@ -14,6 +14,7 @@ import (
 	"github.com/matrix-org/dendrite/roomserver/types"
 	"github.com/matrix-org/gomatrixserverlib"
 	"github.com/matrix-org/util"
+	"github.com/sirupsen/logrus"
 	"github.com/tidwall/gjson"
 )
 
@@ -579,7 +580,37 @@ func (d *Database) StoreExpiry(ctx context.Context, eventNID types.EventNID, ts 
 }
 
 func (d *Database) GetExpired(ctx context.Context, ts int64) ([]types.EventNID, error) {
-	return d.ExpiryTable.GetExpired(ctx, ts)
+	eventNids, _ := d.ExpiryTable.GetExpired(ctx, ts)
+
+	events, err := d.Events(ctx, eventNids)
+
+	if err != nil {
+		logrus.WithError(err)
+	}
+
+	for evtNID, event := range events {
+		redactedEvent := event.Redact()
+		var nid types.EventNID
+		nid = types.EventNID(evtNID)
+		err := d.Writer.Do(d.DB, nil, func(txn *sql.Tx) error {
+			return d.EventJSONTable.InsertEventJSON(ctx, txn, nid, redactedEvent.JSON())
+		})
+
+		if err != nil {
+			logrus.WithError(err)
+		}
+
+		err = d.Writer.Do(d.DB, nil, func(txn *sql.Tx) error {
+			return d.ExpiryTable.RemoveExpiry(ctx, txn, nid)
+		})
+
+		if err != nil {
+			logrus.WithError(err)
+		}
+
+	}
+
+	return eventNids, err
 }
 
 func (d *Database) assignRoomNID(
